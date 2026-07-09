@@ -98,7 +98,9 @@ You'll need at minimum:
 
 **Option A: VoxCPM (recommended, open-source, best clone quality)**
 
-Needs a GPU (NVIDIA, >= 8GB VRAM). Best with a local GPU for lowest latency; also works with cloud GPUs (e.g., RunPod L4):
+Needs a GPU (NVIDIA, >= 8GB VRAM). Best with a local GPU for lowest latency; also works with cloud GPUs (e.g., RunPod L4).
+
+Fengge's reference audio is included in the repo at `assets/voice_samples/fengge_ref.wav` (sourced from Fengge's publicly available livestream content). Once your VoxCPM server is running, it can use this file directly:
 
 ```bash
 # On the GPU machine

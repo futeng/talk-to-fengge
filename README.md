@@ -98,7 +98,9 @@ cp .env.example .env.local
 
 **方案 A：VoxCPM（推荐，开源免费，克隆效果最好）**
 
-需要 GPU（NVIDIA，显存 >= 8GB）。本机有 GPU 直接本地跑效果最好、延迟最低；也可以用云 GPU（如 RunPod L4）：
+需要 GPU（NVIDIA，显存 >= 8GB）。本机有 GPU 直接本地跑效果最好、延迟最低；也可以用云 GPU（如 RunPod L4）。
+
+峰哥的参考音频已包含在仓库 `assets/voice_samples/fengge_ref.wav` 中（整理自峰哥公开直播内容），配好 VoxCPM 服务后可直接使用：
 
 ```bash
 # 在 GPU 机器上

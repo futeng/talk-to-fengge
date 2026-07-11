@@ -226,4 +226,6 @@ Want to learn more, exchange ideas, or explore collaboration:
 
 ## License
 
-MIT
+[Apache-2.0](LICENSE)
+
+This project is built on the [LiveKit Agents](https://github.com/livekit/agents) (Apache-2.0) framework. See [NOTICE](NOTICE) for details.

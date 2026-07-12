@@ -87,7 +87,13 @@ def main() -> None:
     response = httpx.post(VOICE_CLONE_URL, headers=headers, json=body, timeout=60)
     log_id = response.headers.get("X-Tt-Logid", "")
     if response.is_error:
-        raise SystemExit(f"声音复刻失败 HTTP {response.status_code}; X-Tt-Logid={log_id}; {response.text[:500]}")
+        hint = ""
+        if "resource ID is mismatched with speaker related resource" in response.text:
+            hint = "；请在同一项目的开通管理中确认声音复刻2.0和音色槽位均已开通"
+        raise SystemExit(
+            f"声音复刻失败 HTTP {response.status_code}; X-Tt-Logid={log_id}; "
+            f"{response.text[:500]}{hint}"
+        )
     result = response.json()
     safe = {
         "speaker_id": result.get("speaker_id"),

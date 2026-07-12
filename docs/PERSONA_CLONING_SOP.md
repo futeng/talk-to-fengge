@@ -49,7 +49,7 @@ uv run python scripts/clone_voice.py sample.wav \
   --i-have-rights
 ```
 
-旧控制台凭据必须先在控制台开通声音复刻 2.0/音色服务，并把获配的音色槽位作为 `--speaker-id S_xxx` 传入；新版 API Key 后付费流程可不传。注册工具会拒绝把普通 TTS 官方音色误当复刻槽位。
+旧控制台凭据必须先在控制台开通声音复刻 2.0/音色服务，并把获配的音色槽位作为 `--speaker-id S_xxx` 传入；新版 API Key 后付费流程可不传 `speaker_id`，但同一项目下仍须同时开通“声音复刻 2.0”和“音色槽位”。注册工具会拒绝把普通 TTS 官方音色误当复刻槽位。
 
 保存返回的 `speaker_id`、训练时间、样本哈希、授权记录和试听结果，不保存或传播访问 Token。配置：
 

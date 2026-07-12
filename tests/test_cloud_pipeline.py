@@ -125,6 +125,24 @@ def test_key_file_parser_separates_asr_and_tts_tokens(tmp_path):
     assert parsed["DOUBAO_ASR_ACCESS_TOKEN"] == "asr-token"
     assert parsed["DOUBAO_TTS_ACCESS_TOKEN"] == "tts-token"
     assert parsed["DEEPSEEK_MODEL"] == "deepseek-v4-flash"
+    assert parsed["DOUBAO_TTS_API_KEY"] == ""
+
+
+def test_key_file_parser_reads_new_console_tts_api_key(tmp_path):
+    key_file = tmp_path / "key.txt"
+    key_file.write_text(
+        "DeepSeek API Endpoint：https://api.deepseek.com\n"
+        "API Key：ds-secret\n"
+        "model name：deepseek-v4-flash\n"
+        "火山引擎 App ID：asr-app\n"
+        "Access token：asr-token\n"
+        "火山引擎语音合成 AppID：tts-app\n"
+        "Access token：tts-token\n"
+        "火山引擎 API Key：tts-api-key\n",
+        encoding="utf-8",
+    )
+    parsed = _parse_key_file(key_file)
+    assert parsed["DOUBAO_TTS_API_KEY"] == "tts-api-key"
 
 
 def test_select_persona_updates_env(monkeypatch, tmp_path):

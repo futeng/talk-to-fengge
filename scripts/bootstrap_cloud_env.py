@@ -20,8 +20,8 @@ def _parse_key_file(path: Path) -> dict[str, str]:
         else:
             sections[label.lower()] = value
 
-    if len(access_tokens) < 2:
-        raise ValueError("key.txt 中需要分别提供 ASR 与 TTS 的两个 Access token")
+    if not access_tokens:
+        raise ValueError("key.txt 中缺少 ASR Access token")
     return {
         "DEEPSEEK_BASE_URL": sections.get("deepseek api endpoint", "https://api.deepseek.com"),
         "DEEPSEEK_API_KEY": sections.get("api key", ""),
@@ -29,7 +29,8 @@ def _parse_key_file(path: Path) -> dict[str, str]:
         "DOUBAO_ASR_APP_ID": sections.get("火山引擎 app id", ""),
         "DOUBAO_ASR_ACCESS_TOKEN": access_tokens[0],
         "DOUBAO_TTS_APP_ID": sections.get("火山引擎语音合成 appid", ""),
-        "DOUBAO_TTS_ACCESS_TOKEN": access_tokens[1],
+        "DOUBAO_TTS_ACCESS_TOKEN": access_tokens[1] if len(access_tokens) > 1 else "",
+        "DOUBAO_TTS_API_KEY": sections.get("火山引擎 api key", ""),
     }
 
 
@@ -64,7 +65,16 @@ def main() -> None:
             "DOUBAO_TTS_LANGUAGE": args.tts_language,
         }
     )
-    missing = [key for key, value in values.items() if not value and key.endswith(("API_KEY", "APP_ID", "ACCESS_TOKEN"))]
+    required = {
+        "DEEPSEEK_API_KEY",
+        "DOUBAO_ASR_APP_ID",
+        "DOUBAO_ASR_ACCESS_TOKEN",
+    }
+    missing = [key for key in required if not values.get(key)]
+    if not values.get("DOUBAO_TTS_API_KEY") and not (
+        values.get("DOUBAO_TTS_APP_ID") and values.get("DOUBAO_TTS_ACCESS_TOKEN")
+    ):
+        missing.append("DOUBAO_TTS_API_KEY 或 TTS APP_ID+ACCESS_TOKEN")
     if missing:
         raise ValueError(f"key.txt 缺少必要配置项: {', '.join(missing)}")
 

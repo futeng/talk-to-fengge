@@ -1,13 +1,21 @@
 [project]
-name = "deepseek-talk-to-me"
-version = "0.1.0"
-description = "实时语音 Agent：用叶会羽的人格和记忆进行语音对话，并沉淀记忆。"
+name = "talk-to-persona-cloud"
+version = "4.0.0"
+description = "豆包 ASR 2.0、DeepSeek V4 Flash 与豆包 WebSocket TTS 驱动的全云端实时人物对话。"
 requires-python = ">=3.11,<3.15"
 dependencies = [
-    "livekit-agents[google]~=1.5",
+    "livekit-agents~=1.5",
+    "livekit-plugins-bytedance~=0.1.0",
     "python-dotenv>=1.1.1",
     "httpx>=0.28.0",
+    "numpy>=2.0",
 ]
 
 [tool.uv]
 package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]

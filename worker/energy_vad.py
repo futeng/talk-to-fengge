@@ -96,10 +96,6 @@ class _EnergyVADStream(VADStream):
                 rms = self._frame_rms(item)
                 frame_duration = self._frame_duration(item)
                 self._frames.append(item)
-                if self._frame_counter <= 5 or self._frame_counter % 20 == 1:
-                    data_len = len(item.data) if hasattr(item.data, '__len__') else 0
-                    first_bytes = list(bytes(item.data)[:8]) if data_len else []
-                    print(f"[vad] frame #{self._frame_counter} rms={rms} sr={item.sample_rate} ch={item.num_channels} samples={item.samples_per_channel} data_len={data_len} first_bytes={first_bytes}", flush=True)
                 self._frame_counter += 1
                 if len(self._frames) > 256:
                     self._frames = self._frames[-128:]
@@ -208,7 +204,8 @@ class _EnergyVADStream(VADStream):
             probability=probability,
             inference_duration=0.0,
         )
-        print(f"[vad] emit {event_type.value} prob={probability:.2f} speech_dur={ev.speech_duration:.2f}s silence_dur={ev.silence_duration:.2f}s t={time.time():.3f}", flush=True)
+        if event_type != VADEventType.INFERENCE_DONE:
+            print(f"[vad] emit {event_type.value} speech_dur={ev.speech_duration:.2f}s silence_dur={ev.silence_duration:.2f}s", flush=True)
         self._event_ch.send_nowait(ev)
 
     def _reset_state(self, *, emit_end: bool) -> None:

@@ -12,10 +12,14 @@ https://github.com/livekit/agents
 
 ---
 
+livekit-plugins-bytedance
+Licensed under the MIT License
+https://github.com/Ao-Last/livekit-plugins-extra
+
+---
+
 This project also uses or references the following open-source projects
 (not bundled in this repository — installed separately or called via API):
 
-- VoxCPM (Apache-2.0) — https://github.com/OpenBMB/VoxCPM
-- OpenViking (AGPL-3.0) — https://github.com/volcengine/OpenViking
 - Nuwa Skill (MIT) — https://github.com/alchaincyf/nuwa-skill
 - Fengge Skill (MIT) — https://github.com/YixiaJack/feng-ge-skill

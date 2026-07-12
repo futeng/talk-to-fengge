@@ -24,6 +24,9 @@ assets/voice_samples/*
 !assets/voice_samples/README.md
 !assets/voice_samples/fengge_ref.m4a
 !assets/voice_samples/fengge_ref.wav
+personas/*/sources/
+personas/*/*.speaker.json
+data/
 
 # 备份
 *.bak*

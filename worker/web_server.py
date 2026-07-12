@@ -6,7 +6,7 @@ import asyncio
 import json
 import os
 import secrets
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from dotenv import load_dotenv  # 阶段 20 修复：web 进程独立拉起时也读到 AGENT_NAME
@@ -15,7 +15,6 @@ from livekit.protocol.agent_dispatch import CreateAgentDispatchRequest
 from livekit.protocol.room import CreateRoomRequest
 
 from worker.runtime_env import (
-    configure_egress_proxy,
     configure_local_no_proxy,
     local_service_env,
 )
@@ -35,44 +34,20 @@ for env_name in (".env.local", ".env"):
 API_KEY = os.getenv("LIVEKIT_API_KEY", "devkey")
 API_SECRET = os.getenv("LIVEKIT_API_SECRET", "secret")
 LIVEKIT_URL = os.getenv("LIVEKIT_URL", "ws://127.0.0.1:7880")
-AGENT_NAME = os.getenv("AGENT_NAME", "talk-to-me-dev3")
+AGENT_NAME = os.getenv("AGENT_NAME", "talk-to-persona-cloud")
 assert AGENT_NAME, "AGENT_NAME is required"
 
-# 阶段 20 修复：先设 1087 代理再让 localhost 走 NO_PROXY 豁免（与 agent.py 对齐）
-configure_egress_proxy()
 configure_local_no_proxy()
 
 
 def create_room_and_token(room_base: str, identity: str, name: str) -> dict:
-    """创建房间、确保 agent dispatch 存在，并生成用户 token。
-
-    阶段 29: 按 room 前缀路由到不同 worker 的 agent_name。
-    room 命名约定：ttm-<provider>-room-xxxx
-      ttm-minimax-room-*  → talk-to-me-minimax
-      ttm-deepseek-room-* → talk-to-me-deepseek
-      ttm-gemini-room-*   → talk-to-me-gemini
-      其他/老 room 名     → 走 AGENT_NAME（兼容）
-    """
+    """创建房间并生成用户 token；等麦克风发布后再 dispatch Agent。"""
     host = LIVEKIT_URL.replace("ws://", "http://").replace("wss://", "https://")
     room_name = f"{room_base}-{secrets.token_hex(4)}"
 
-    # 阶段 29: room 前缀 → agent_name 路由
-    _PROVIDER_TO_AGENT = {
-        "minimax": "talk-to-me-minimax",
-        "deepseek": "talk-to-me-deepseek",
-        "gemini": "talk-to-me-gemini",
-    }
-    if "ttm-minimax" in room_base:
-        target_agent = _PROVIDER_TO_AGENT["minimax"]
-    elif "ttm-deepseek" in room_base:
-        target_agent = _PROVIDER_TO_AGENT["deepseek"]
-    elif "ttm-gemini" in room_base:
-        target_agent = _PROVIDER_TO_AGENT["gemini"]
-    else:
-        target_agent = AGENT_NAME  # 兼容老 room 名
-    print(f"[web] 路由 room='{room_name}' → agent='{target_agent}'", flush=True)
+    print(f"[web] 创建 room='{room_name}'", flush=True)
 
-    async def ensure_room_and_dispatch() -> None:
+    async def ensure_room() -> None:
         with local_service_env():
             lk = lk_api.LiveKitAPI(host, API_KEY, API_SECRET)
             try:
@@ -85,15 +60,10 @@ def create_room_and_token(room_base: str, identity: str, name: str) -> dict:
                 else:
                     print(f"[web] 房间 '{room_name}' 已存在，复用")
 
-            try:
-                await lk.agent_dispatch.create_dispatch(
-                    CreateAgentDispatchRequest(agent_name=target_agent, room=room_name)
-                )
-                print(f"[web] ✅ 已 dispatch agent: {target_agent} -> {room_name}")
             finally:
                 await lk.aclose()
 
-    asyncio.run(ensure_room_and_dispatch())
+    asyncio.run(ensure_room())
 
     user_token = (
         lk_api.AccessToken(API_KEY, API_SECRET)
@@ -109,6 +79,26 @@ def create_room_and_token(room_base: str, identity: str, name: str) -> dict:
         "identity": identity,
         "livekit_url": LIVEKIT_URL,
     }
+
+
+def dispatch_agent(room_name: str) -> None:
+    """用户已进房并发布麦克风后，再启动 Agent，避免 ASR 空闲超时。"""
+    if not room_name.startswith("ttm-") or len(room_name) > 128:
+        raise ValueError("invalid room name")
+    host = LIVEKIT_URL.replace("ws://", "http://").replace("wss://", "https://")
+
+    async def dispatch() -> None:
+        with local_service_env():
+            lk = lk_api.LiveKitAPI(host, API_KEY, API_SECRET)
+            try:
+                await lk.agent_dispatch.create_dispatch(
+                    CreateAgentDispatchRequest(agent_name=AGENT_NAME, room=room_name)
+                )
+                print(f"[web] ✅ 已 dispatch agent: {AGENT_NAME} -> {room_name}")
+            finally:
+                await lk.aclose()
+
+    asyncio.run(dispatch())
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -131,6 +121,15 @@ class Handler(SimpleHTTPRequestHandler):
 
             result = create_room_and_token(room, identity, name)
             self._send_json(200, result)
+        elif self.path == "/dispatch":
+            content_length = int(self.headers.get("Content-Length", 0))
+            try:
+                data = json.loads(self.rfile.read(content_length))
+                dispatch_agent(str(data.get("room", "")))
+            except (json.JSONDecodeError, ValueError) as exc:
+                self._send_json(400, {"error": str(exc)})
+                return
+            self._send_json(200, {"ok": True})
         else:
             self._send_json(404, {"error": "not found"})
 
@@ -161,7 +160,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
     port = int(os.getenv("WEB_PORT", "8766"))
-    server = HTTPServer(("127.0.0.1", port), Handler)
+    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     print(f"[web] http://127.0.0.1:{port}", flush=True)
     try:
         server.serve_forever()

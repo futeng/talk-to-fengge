@@ -1,98 +1,18 @@
-"""V3.6 persona 模块——多人格配置化加载，拼装 system instruction。
-
-V3.6 新增峰哥（峰哥亡命天涯）人格，通过 PERSONA_NAME 环境变量切换。
-峰哥人格直接内联（不依赖外部 SKILL.md），因为语音对话需要精简 prompt。
-"""
+"""低延迟人物 prompt 加载器。"""
 
 from __future__ import annotations
 
 import os
-import re
-from dataclasses import dataclass, field
 from pathlib import Path
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
-
-@dataclass
-class PersonaConfig:
-    name: str = "fengge"
-    skill_dir: Path = field(default_factory=lambda: _PROJECT_ROOT / "docs")
-    few_shot_file: Path | None = None
-    max_prompt_chars: int = 3000
-
-    @property
-    def skill_file(self) -> Path:
-        return self.skill_dir / "SKILL.md"
-
-    @property
-    def synthesis_file(self) -> Path:
-        return self.skill_dir / "references" / "research" / "synthesis.md"
-
-
-DEFAULT_CONFIG = PersonaConfig()
-
-PERSONA_REGISTRY: dict[str, PersonaConfig] = {
-    "fengge": DEFAULT_CONFIG,
-}
-
+_PERSONA_ROOT = _PROJECT_ROOT / "personas"
 
 def _read_file(path: Path) -> str:
     if not path.exists():
         return ""
     return path.read_text(encoding="utf-8")
-
-
-def _extract_section(text: str, header: str, stop_at_level: int = 2) -> str:
-    lines = text.split("\n")
-    result: list[str] = []
-    in_section = False
-    header_prefix = "#" * stop_at_level + " "
-
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith(header):
-            in_section = True
-            continue
-        if in_section:
-            if stripped.startswith(header_prefix) and not stripped.startswith(header):
-                break
-            result.append(line)
-
-    return "\n".join(result).strip()
-
-
-def _extract_mental_model_summaries(text: str) -> str:
-    lines = text.split("\n")
-    summaries: list[str] = []
-    in_models = False
-
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("## 核心心智模型"):
-            in_models = True
-            continue
-        if in_models and stripped.startswith("## "):
-            break
-        if in_models and stripped.startswith("### 模型"):
-            summaries.append(f"- {stripped.replace('### ', '')}")
-        if in_models and stripped.startswith("**一句话**"):
-            summary = stripped.replace("**一句话**：", "").replace("**一句话**:", "")
-            if summaries:
-                summaries[-1] += f"：{summary}"
-
-    return "\n".join(summaries)
-
-
-def _load_few_shot(config: PersonaConfig) -> str:
-    if config.few_shot_file and config.few_shot_file.exists():
-        return _read_file(config.few_shot_file)
-    default_path = config.skill_dir / "few-shot-voice.md"
-    if default_path.exists():
-        return _read_file(default_path)
-    return ""
-
 
 def _build_fengge_prompt() -> str:
     """峰哥（峰哥亡命天涯）的语音对话人格 prompt。
@@ -259,9 +179,16 @@ def build_system_prompt(persona_name: str | None = None) -> str:
     if persona_name is None:
         persona_name = os.getenv("PERSONA_NAME", "fengge").strip().lower()
 
+    persona_file = _PERSONA_ROOT / persona_name / "persona.md"
+    if persona_file.exists():
+        prompt = _read_file(persona_file).strip()
+        if not prompt:
+            raise ValueError(f"人格文件为空: {persona_file}")
+        return prompt
     if persona_name == "fengge":
         return _build_fengge_prompt()
-    return _build_fengge_prompt()
+    available = sorted(path.parent.name for path in _PERSONA_ROOT.glob("*/persona.md"))
+    raise ValueError(f"未知人格 {persona_name!r}；可用人格: fengge, {', '.join(available)}")
 
 
 if __name__ == "__main__":

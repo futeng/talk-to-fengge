@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Talk to Me V3.6 — 峰哥</title>
+<title>Talk to Persona — 全云端实时人物对话</title>
 <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -182,7 +182,7 @@
 <div id="ui">
     <div id="topBar">
         <select id="modelSelect">
-            <option value="minimax">峰哥 · MiniMax</option>
+            <option value="cloud">AI 合成人物 · 非真人/非真实录音 · DeepSeek V4 Flash</option>
         </select>
         <div id="statusPill">
             <span id="statusDot" class="ready"></span>
@@ -226,7 +226,7 @@ function bootTalkToMe() {
     const PARTICLE_COUNT = 5000;
 
     const MODEL_NAMES = {
-        minimax: '峰哥',
+        cloud: 'AI 人物',
     };
 
     // ================================================================
@@ -822,7 +822,7 @@ function bootTalkToMe() {
 
     function getRoomName() {
         const sel = document.getElementById('modelSelect');
-        const v = sel ? sel.value : 'minimax';
+        const v = sel ? sel.value : 'cloud';
         return 'ttm-' + v + '-room';
     }
 
@@ -839,8 +839,8 @@ function bootTalkToMe() {
             throw new Error('Token 获取失败 (HTTP ' + resp.status + '): ' + text);
         }
         const data = await resp.json();
-        if (!data.token) throw new Error('Token 为空');
-        return data.token;
+        if (!data.token || !data.room) throw new Error('Token 或房间为空');
+        return data;
     }
 
     let room = null;
@@ -856,7 +856,7 @@ function bootTalkToMe() {
         setStatus('connecting');
 
         try {
-            const token = await getToken();
+            const auth = await getToken();
 
             room = new LivekitClient.Room({ adaptiveStream: true, dynacast: true });
 
@@ -905,7 +905,7 @@ function bootTalkToMe() {
                 if (text) showTranscript(text);
             });
 
-            await room.connect(LIVEKIT_URL, token);
+            await room.connect(auth.livekit_url || LIVEKIT_URL, auth.token);
 
             try {
                 await room.localParticipant.setMicrophoneEnabled(true);
@@ -915,6 +915,12 @@ function bootTalkToMe() {
                 if (pub && pub.track && pub.track.mediaStreamTrack) {
                     connectMicToAnalyser(pub.track.mediaStreamTrack);
                 }
+                const dispatchResp = await fetch(TOKEN_URL.replace('/token', '/dispatch'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ room: auth.room }),
+                });
+                if (!dispatchResp.ok) throw new Error('Agent dispatch 失败');
             } catch (micErr) {
                 console.warn('microphone error', micErr);
                 showToast('请允许浏览器使用麦克风');

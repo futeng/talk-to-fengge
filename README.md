@@ -1,231 +1,123 @@
-# Talk to 峰哥
+# Talk to Persona：全云端实时人物对话
 
 [English](README_EN.md)
 
-**实时语音对话 + 音色克隆 + 人格注入，工程延迟 < 1 秒。**
+把任意一组已获授权的人物资料，做成可打断、低延迟、具有稳定人格与声音的实时语音对话。当前运行链路固定为：
 
-和 B 站百万粉丝博主「峰哥亡命天涯」的 AI 分身实时语音聊天。不是文字转语音——是真的像打电话一样聊天，声音和性格都是峰哥的。
-
-峰哥是这套架构的第一个完整示例。架构上支持替换成其他人——你需要准备语音素材和人格描述，具体见下方「[换成其他人的声音和性格](#换成其他人的声音和性格)」章节。
-
-> [Demo 视频（5.6 万+ 围观）](https://x.com/leaf_sanren/status/2069342335268507976)
-
----
-
-## 这个项目有什么不同？
-
-市面上有很多语音克隆项目，也有很多实时语音对话项目。但它们通常是割裂的：
-
-- **能实时对话的**（如 GPT-4o Voice）→ 不支持自定义音色克隆
-- **能克隆音色的**（如 Bark、XTTS）→ 只能文本转语音，不能实时对话
-
-这个项目把三件事合在了一起：
-
-1. **音色克隆**——用 15-45 秒的语音素材克隆任何人的声音
-2. **人格注入**——说话风格、口头禅、思维方式，不只是声音像，性格也像
-3. **实时对话**——像打电话一样聊天，工程链路延迟压到 1 秒以内
-
-## 技术栈
-
-```
-用户说话 → STT（语音识别）→ LLM（大语言模型）→ TTS（音色克隆合成）→ 用户听到回复
-                                  ↑
-                          人格注入 + 记忆召回（可选）
+```text
+浏览器麦克风
+  → LiveKit WebRTC
+  → 豆包流式语音识别模型 2.0（WebSocket）
+  → DeepSeek V4 Flash（流式、非思考模式）
+  → 豆包 V3 双向 WebSocket TTS（官方音色或声音复刻 2.0）
+  → LiveKit 实时播放
 ```
 
-| 模块 | 默认方案 | 说明 |
-|------|---------|------|
-| 实时音视频 | [LiveKit](https://livekit.io/) | WebRTC 框架，处理浏览器与 Agent 之间的音频流 |
-| 语音识别 (STT) | [Cartesia ink-whisper](https://www.cartesia.ai/ink/)（推荐） | 免费层可用，中文效果好，延迟低 |
-| 大语言模型 (LLM) | [MiniMax-M2.7-highspeed](https://www.minimaxi.com/)（推荐） | 国产模型，TTFB 极低，无需 VPN |
-| 语音合成 + 音色克隆 (TTS) | [VoxCPM](https://github.com/openbmb/VoxCPM)（推荐） | 开源音色克隆，效果最好，需 GPU（云或本地） |
-| 人格系统 | 基于 [女娲 Skill](https://github.com/alchaincyf/nuwa-skill) 蒸馏 + [峰哥 Skill](https://github.com/YixiaJack/feng-ge-skill) + 直播语料补充 | 说话风格 + 口头禅 + 思维方式 |
-| 记忆系统 | [OpenViking](https://github.com/nicepkg/openviking)（可选） | 对话记忆沉淀与召回 |
+没有本地 GPU、VoxCPM、MOSS，也没有跨供应商静默降级。配置错误会直接失败，便于稳定控制音色、延迟和成本。
 
-### 备选方案
+## 已实现
 
-通过 `.env.local` 一行切换：
-
-- **STT**：Cartesia ink-whisper（推荐）/ Deepgram nova-2
-- **LLM**：MiniMax（推荐，国产无需 VPN）/ DeepSeek / Gemini
-- **TTS**：VoxCPM（推荐，开源，克隆效果最好）/ [MOSS-TTS](https://github.com/open-moss/moss-tts-nano)（CPU 可跑，兜底方案）/ Cartesia Sonic（云端，需 $5/月 Pro 订阅）/ MiniMax TTS
+- 豆包 ASR 2.0 优化双向流：`volc.seedasr.sauc.duration`，中间结果 + 服务端 VAD 二遍定稿。
+- DeepSeek `deepseek-v4-flash`：SSE token 流，显式 `thinking.type=disabled`，口语回复默认最多 100 token。
+- 豆包 TTS V3 双向 WebSocket：LLM 文本增量输入、PCM 音频流式输出、支持 `seed-icl-2.0` 克隆音色。
+- 打断与低延迟端点检测：用户开口即可停止当前播放，VAD 参数可调。
+- 文件化人物包：`personas/<name>/persona.md`，无需改 Python 即可新增人物。
+- Steve Jobs 教育性 AI 重建示例：`personas/steve_jobs/`，明确标注为合成内容，不冒充本人或真实录音。
+- 安全密钥导入与声音复刻 CLI；密钥只进入 gitignored 的 `.env.local`。
 
 ## 快速开始
 
-### 最简单的方式：让 AI 编程助手帮你配
+要求：Python 3.11+、[uv](https://docs.astral.sh/uv/)、[LiveKit Server](https://docs.livekit.io/home/self-hosting/local/)。
 
 ```bash
-git clone https://github.com/YeJe-cpu/talk-to-fengge.git
-cd talk-to-fengge
-```
-
-然后把这个项目扔给任何 AI 编程助手——[Claude Code](https://claude.ai/code)、[Cursor](https://cursor.com/)、[Codex](https://openai.com/codex)、[Windsurf](https://codeium.com/windsurf)，或者你用的其他工具都行。告诉它「帮我配置并启动这个项目」，Agent 会读取 `.env.example`，引导你填 API key、装依赖、启动服务。
-
-### 手动配置
-
-<details>
-<summary>展开手动配置步骤</summary>
-
-#### 1. 前置依赖
-
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/)（推荐）或 pip
-- [LiveKit Server](https://docs.livekit.io/home/self-hosting/local/)
-
-#### 2. 安装
-
-```bash
-# 安装 Python 依赖
 uv sync
 
-# 安装 LiveKit（macOS）
-brew install livekit
-```
+# 从本机 key.txt 生成权限为 0600 的 .env.local，不回显密钥
+uv run python scripts/bootstrap_cloud_env.py \
+  --key-file ~/Documents/key.txt \
+  --persona steve_jobs \
+  --speaker en_male_tim_uranus_bigtts \
+  --tts-resource seed-tts-2.0 \
+  --tts-language en
 
-#### 3. 配置
-
-```bash
-cp .env.example .env.local
-# 编辑 .env.local，填入你的 API key
-```
-
-你至少需要：
-- **Cartesia API Key**（STT，[免费注册](https://www.cartesia.ai/)）
-- **MiniMax API Key**（LLM，[注册](https://www.minimaxi.com/)，国产，无需 VPN）
-- **TTS 方案**（见下方）
-
-#### 4. TTS 音色克隆方案
-
-**方案 A：VoxCPM（推荐，开源免费，克隆效果最好）**
-
-需要 GPU（NVIDIA，显存 >= 8GB）。本机有 GPU 直接本地跑效果最好、延迟最低；也可以用云 GPU（如 RunPod L4）。
-
-峰哥的参考音频已包含在仓库 `assets/voice_samples/fengge_ref.wav` 中（整理自峰哥公开直播内容），配好 VoxCPM 服务后可直接使用：
-
-```bash
-# 在 GPU 机器上
-bash runpod_setup.sh  # 安装依赖 + 下载模型（首次约 10 分钟）
-```
-
-**方案 B：MOSS-TTS（CPU 可跑，兜底方案）**
-
-不需要 GPU，但音色克隆效果和速度不如 VoxCPM。在 `.env.local` 设置 `TTS_PROVIDER=moss`。
-
-**方案 C：Cartesia Sonic（云端，无需 GPU）**
-
-需要 Cartesia Pro 订阅（$5/月）才能克隆音色。在 `.env.local` 设置 `TTS_PROVIDER=cartesia`。
-
-#### 5. 启动
-
-```bash
-# 方式一：双击启动脚本（macOS）
 ./Talk-to-Me-V3.6.command
-
-# 方式二：手动启动各组件
-livekit-server --dev --node-ip=127.0.0.1  # 终端 1
-LLM_PROVIDER=minimax python -m worker.main start  # 终端 2
-python -m worker.web_server  # 终端 3
 ```
 
-打开 http://127.0.0.1:8766 开始聊天。
+打开 [http://127.0.0.1:8766](http://127.0.0.1:8766)。默认 App ID 示例是 `7446114798`；真实 Token 和 DeepSeek Key 不得提交到仓库。
 
-</details>
+若使用声音复刻音色，把 `.env.local` 改为：
 
-## 换成其他人的声音和性格
-
-峰哥是内置的完整示例。如果你想换成其他人，需要准备两样东西：
-
-### 1. 声音素材
-
-录一段 15-45 秒的清晰人声（无背景音乐、无噪音），用 VoxCPM 克隆音色。
-
-### 2. 人格描述
-
-最省事的方式：把这个 repo 用 AI 编程助手打开，告诉它：
-
-> 「我想把人格换成 XXX。这是 ta 的一些素材：[粘贴文字 / 链接 / 你对 ta 的描述]。请参考 `docs/persona-*.md` 和 `worker/persona.py` 里峰哥的写法，帮我生成新的人格配置。」
-
-AI 助手会读现有的峰哥人格作为模板，通过跟你对话提取关键特征，生成新的 persona 代码。
-
-如果你有更丰富的素材（聊天记录、语音转文字、社交媒体内容、直播切片），效果会更好。
-
-## 架构
-
-```
-┌──────────────────────────────────────────────────┐
-│                  浏览器前端                         │
-│         HTML + LiveKit Web SDK                    │
-│         麦克风采集 → WebRTC → 播放回复               │
-└─────────────────────┬────────────────────────────┘
-                      │ WebRTC (audio)
-                      ▼
-┌──────────────────────────────────────────────────┐
-│              LiveKit Server（本地）                 │
-│         房间管理 / 音频流转发                        │
-└──────┬──────────────────────────┬────────────────┘
-       │                          │
-       ▼                          ▼
-┌──────────────────────┐  ┌──────────────────┐
-│  Agent Worker (Python) │  │  Web Server       │
-│                        │  │  (端口 8766)       │
-│  人格 + 记忆 → LLM     │  │  提供前端页面       │
-│                        │  └──────────────────┘
-│  音频 → STT            │
-│          ↓             │
-│         LLM            │
-│          ↓             │
-│   TTS（VoxCPM 音色克隆）│
-│          ↓             │
-│        音频输出         │
-└──────────┬─────────────┘
-           │ (可选)
-           ▼
-     ┌──────────┐
-     │ OpenViking │
-     │ 记忆服务    │
-     └──────────┘
+```bash
+DOUBAO_TTS_RESOURCE_ID=seed-icl-2.0
+DOUBAO_TTS_MODEL=seed-tts-2.0-expressive
+DOUBAO_TTS_SPEAKER=<训练返回的 speaker_id>
 ```
 
-## 已知不足 & 后续方向
+## 注册已授权声音
 
-- **部署环节多**：STT / LLM / TTS 各需要不同的 API key 或服务，尚没有一键部署方案
-- **实际延迟受网络影响**：工程链路延迟 < 1 秒，但实际对话体感约 2~3 秒，受网络环境和 API 响应速度影响
-- **记忆系统受限**：OpenViking 主要识别用户侧的事件和主体来沉淀记忆，但在峰哥场景下 AI 话多用户话少，导致可沉淀的记忆有限
-- **前端简陋**：目前是星空粒子效果的单页，还没有灵动的数字人 / 虚拟形象
+仅在你拥有声音样本和声音复刻所需授权时执行：
 
-### 后续想做的
+```bash
+uv run python scripts/clone_voice.py /path/to/clean-sample.wav \
+  --language en \
+  --persona your_person \
+  --output personas/your_person/your_person.speaker.json \
+  --demo-text "Your sample transcript" \
+  --i-have-rights
+```
 
-- [ ] 灵动数字人 / 虚拟形象接入
-- [ ] 一键部署 + 自动抓取素材生成 persona（自动化人格蒸馏）
-- [ ] 更多克隆人格模板
+旧控制台 App ID + Access Token 模式还必须传入控制台已开通的 `--speaker-id S_xxx`；新版 API Key 后付费模式可省略。命令只输出 `speaker_id`、训练状态、试听地址和排错 `log_id`，并把人物级配置安全写入权限为 0600 的 `.env.local`，不会输出凭据。首次正式合成克隆音色可能触发豆包音色槽位计费，请先试听并确认效果。
 
-**欢迎在 [Issues](https://github.com/YeJe-cpu/talk-to-fengge/issues) 告诉我你最想要哪个功能。**
+## 切换人物
 
-## Star / Fork / PR
+```text
+personas/
+└── your_person/
+    ├── persona.md          # 身份、事实边界、思维模型、口语风格、few-shot
+    └── persona.env.example # 推荐音色与 TTS 风格参数
+```
 
-如果你觉得这个项目有意思，请给个 Star。
+运行 `uv run python scripts/select_persona.py your_person`，或设置 `PERSONA_NAME=your_person`。可在同一个 `.env.local` 中用 `PERSONA_<ID>_TTS_*` 分别绑定音色；没有对应文件时系统会明确报错，不会误用峰哥人格。
 
-想贡献代码、新的人格模板、或者改进建议？欢迎 Fork + PR。
+完整资料准备、蒸馏、声音训练、验收与上线流程见 [人物实时对话复刻 SOP](docs/PERSONA_CLONING_SOP.md)。
 
-有问题？开 [Issue](https://github.com/YeJe-cpu/talk-to-fengge/issues) 聊。
+## 实测基线
 
-想了解更多、交流想法、或者聊合作：
+在本项目开发机与给定账号上完成真实云 API 冒烟测试：
 
-- [X / Twitter](https://x.com/leaf_sanren)
-- [作品集 & 联系方式](https://www.uncleleaf.cc/)
+| 环节 | 结果 |
+|---|---|
+| 豆包 ASR 2.0 | 6 秒真实音频返回 17 次中间结果、1 次最终结果 |
+| DeepSeek V4 Flash | 首 token 约 0.47–0.9 秒 |
+| 豆包双向 WebSocket TTS | 首音频约 0.46–0.61 秒，持续分块输出 |
+| 完整 LiveKit → ASR → LLM → TTS → LiveKit | 测试问题结束后约 2.68 秒收到非静音回复 |
+| 峰哥人物（中文官方近似音色） | 2026-07-12 实测约 2.53 秒收到非静音回复 |
+| Steve Jobs 人格（英文官方近似音色） | 2026-07-12 实测约 2.26 秒收到非静音回复；LLM 首 token 674 ms |
 
-— **Leaf**
+后两项验证的是全云实时功能与人物 prompt；官方近似音色不是本人声音，不能作为声音相似度验收。以上均为单次开发环境观测，不是 SLA。端到端体感还受说话判停、网络、地域、音色模型和句长影响；生产环境应持续记录 p50/p95。
 
-## 致谢
+## 测试
 
-- [LiveKit](https://github.com/livekit/livekit) — 实时音视频框架
-- [VoxCPM](https://github.com/openbmb/VoxCPM) — 开源音色克隆模型（OpenBMB）
-- [OpenViking](https://github.com/nicepkg/openviking) — 本地记忆系统
-- [女娲 Skill](https://github.com/alchaincyf/nuwa-skill) — 人格蒸馏方法论（峰哥人格的底层蒸馏工具）
-- [峰哥 Skill](https://github.com/YixiaJack/feng-ge-skill) — 峰哥人格蒸馏产出（本项目的人格基础）
+```bash
+uv run pytest -q tests/test_cloud_pipeline.py tests/test_energy_vad.py tests/test_runtime_env.py
 
-## License
+# 真实调用三段云 API，输出不含凭据的延迟指标
+uv run python scripts/smoke_cloud.py
 
-[Apache-2.0](LICENSE)
+# 服务栈启动后，通过真实 LiveKit 房间发布音频并验证非静音回复
+uv run python scripts/smoke_realtime.py /path/to/16k-mono.wav
+```
 
-本项目基于 [LiveKit Agents](https://github.com/livekit/agents)（Apache-2.0）框架开发，详见 [NOTICE](NOTICE) 文件。
+## 官方协议参考
+
+- [豆包流式语音识别 WebSocket](https://www.volcengine.com/docs/6561/1354869)
+- [豆包双向流式语音合成 WebSocket](https://www.volcengine.com/docs/6561/1329505)
+- [豆包声音复刻训练 HTTP](https://www.volcengine.com/docs/6561/2534906)
+- [DeepSeek Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion)
+- [DeepSeek V4 模型与价格](https://api-docs.deepseek.com/quick_start/pricing)
+
+## 合规边界
+
+只复刻你有权使用的声音和资料；始终向听众披露这是 AI 合成；不得用于冒充、诈骗、虚假背书或伪造历史录音。对在世或已故公众人物，优先使用明确标注的教育、评论或致敬场景，并保留来源与授权记录。
+
+Apache-2.0，详见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。

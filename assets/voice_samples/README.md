@@ -3,7 +3,9 @@
 ## 峰哥参考音频（已包含）
 
 - `fengge_ref.m4a` — 峰哥（峰哥亡命天涯）的语音参考样本，约 45 秒
-- `fengge_ref.wav` — 上述文件转换为 16kHz mono WAV 格式，供 VoxCPM 直接使用
+- `fengge_ref.wav` — 上述文件转换为 16kHz mono WAV 格式，供语音链路测试使用
+
+仓库不会自动把该样本提交到声音复刻服务。执行声音复刻前，请自行确认拥有样本使用和声音复刻所需授权。
 
 **来源说明**：该音频片段整理自峰哥公开发布的直播内容，仅用于开源项目的语音克隆演示。如有版权疑虑，请通过 [Issues](https://github.com/YeJe-cpu/talk-to-fengge/issues) 联系，我们会及时处理。
 
